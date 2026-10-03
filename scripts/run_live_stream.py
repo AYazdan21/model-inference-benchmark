@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Crime-Detect Live Stream Worker
+Model Inference Benchmark Live Stream Worker
 Runs detection inference frame-by-frame and streams binary JPEG frames over stdout.
 Supports bidirectional control commands via stdin (SEEK, PAUSE, RESUME, STOP).
 Can run natively on the host or inside a hardware-constrained Docker container.

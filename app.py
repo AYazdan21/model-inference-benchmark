@@ -1,5 +1,5 @@
 """
-Lightweight Web Application for Crime-Detect.
+Lightweight Web Application for Model Inference Benchmark.
 Runs using Python standard library (zero external dependencies).
 Provides:
 1. Multi-threaded HTTP server for concurrent requests.
@@ -1498,7 +1498,7 @@ HTML_PAGE = """<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Crime-Detect — Edge Hardware Simulator & Live Player</title>
+  <title>Model Inference Benchmark — Edge Hardware Simulator & Live Player</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     :root {
@@ -1903,7 +1903,7 @@ HTML_PAGE = """<!DOCTYPE html>
   <div class="container">
     <header>
       <h1>
-        <span>Crime-Detect</span>
+        <span>Model Inference Benchmark</span>
         <span class="badge">Live Hardware Simulator</span>
       </h1>
       <div style="display: flex; gap: 14px; align-items: center;">
@@ -3407,7 +3407,7 @@ HTML_PAGE = """<!DOCTYPE html>
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="Crime-Detect Live Simulator App")
+    parser = argparse.ArgumentParser(description="Model Inference Benchmark Live Simulator App")
     parser.add_argument("--port", type=int, default=PORT, help="Port to bind (default 5000)")
     parser.add_argument("--no-browser", action="store_true", help="Do not automatically open browser")
     args = parser.parse_args()
@@ -3425,7 +3425,7 @@ def main():
 
     url = f"http://localhost:{port}"
     print("=" * 70)
-    print(f"  CRIME-DETECT LIVE SIMULATOR & PLAYER LAUNCHED")
+    print(f"  MODEL INFERENCE BENCHMARK LIVE SIMULATOR & PLAYER LAUNCHED")
     print(f"  URL: {url}")
     print("  Press Ctrl+C to stop the server")
     print("=" * 70)

@@ -1,4 +1,4 @@
-# Crime-Detect: Edge Hardware Inference & Benchmark Harness
+# Model Inference Benchmark: Edge Hardware Inference & Benchmark Harness
 
 A modular framework designed to run and benchmark crime detection models (YOLO, ONNX, TensorRT, RKNN, HailoRT) on simulated edge hardware environments via Docker. Target platforms and execution constraints are configured via `targets.yaml`.
 
@@ -7,7 +7,7 @@ A modular framework designed to run and benchmark crime detection models (YOLO, 
 ## 📁 Directory Structure
 
 ```text
-Crime-Detect/
+model-inference-benchmark/
 ├── targets.yaml             # Target hardware specifications & benchmark policies
 ├── requirements.txt         # Python dependencies
 ├── README.md                # Project documentation
@@ -324,7 +324,7 @@ The numbers are estimates with about +/-30-50% error versus real hardware (see t
 
 ## 🖥️ Interactive Web Dashboard & Live Player
 
-A lightweight web app and video player is provided via [app.py](file:///d:/Amirreza/Fanap/Code/Crime-Detect/app.py):
+A lightweight web app and video player is provided via [app.py](app.py):
 
 ### Key Features:
 - **Live Video Streaming (MJPEG)**: Displays bounding boxes, detections count, and latency rendered live at full FPS.
@@ -403,8 +403,8 @@ docker compose run --rm arm64-cpu
 ### Build Individual Images
 ```bash
 # x86-64 CPU image
-docker build -t crime-detect:x86-cpu -f docker/Dockerfile.x86_cpu .
+docker build -t model-inference-benchmark:x86-cpu -f docker/Dockerfile.x86_cpu .
 
 # Multiarch ARM64 image (via QEMU)
-docker buildx build --platform linux/arm64 -t crime-detect:arm64-cpu -f docker/Dockerfile.arm64_cpu .
+docker buildx build --platform linux/arm64 -t model-inference-benchmark:arm64-cpu -f docker/Dockerfile.arm64_cpu .
 ```
