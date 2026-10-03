@@ -1,410 +1,323 @@
-# Model Inference Benchmark: Edge Hardware Inference & Benchmark Harness
+# Model Inference Benchmark
 
-A modular framework designed to run and benchmark crime detection models (YOLO, ONNX, TensorRT, RKNN, HailoRT) on simulated edge hardware environments via Docker. Target platforms and execution constraints are configured via `targets.yaml`.
+**Benchmark object-detection models on simulated edge hardware (Raspberry Pi 5, Jetson Orin Nano, Rockchip RK3588 and Hailo-10H) before you buy the boards.**
 
----
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)
+![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)
+![ONNX Runtime](https://img.shields.io/badge/ONNX%20Runtime-supported-005CED?logo=onnx&logoColor=white)
+![Ultralytics](https://img.shields.io/badge/Ultralytics-.pt-111F68)
 
-## 📁 Directory Structure
+![Live inference on the simulated Jetson Orin Nano](docs/images/app-live-inference.jpg)
+<sub>Live inference on the simulated Jetson Orin Nano: 43 people detected, estimated 22.8 FPS on the device, 214 ms per frame measured on the host.</sub>
 
-```text
-model-inference-benchmark/
-├── targets.yaml             # Target hardware specifications & benchmark policies
-├── requirements.txt         # Python dependencies
-├── README.md                # Project documentation
-│
-├── configs/
-│   └── detection.yaml       # Detection parameters (conf_threshold, iou, input size)
-│
-├── models/                  # Storage for model weights
-│   ├── README.md            # Guidelines for weights formats (.pt, .onnx, .engine, .rknn, .hef)
-│   └── best-yolo11-seg.pt   # Preloaded crime detection / segmentation model
-│
-├── videos/                  # Video data directory
-│   ├── README.md            # Video input/output guidelines
-│   ├── input/               # Put raw CCTV footage / sample videos here
-│   └── output/              # Annotated inference videos saved here
-│
-├── docker/                  # Docker containerization & simulation
-│   ├── Dockerfile.x86_cpu   # x86-64 CPU container
-│   ├── Dockerfile.arm64_cpu # ARM64 multi-architecture container (QEMU emulation)
-│   ├── Dockerfile.jetson    # NVIDIA Jetson JetPack / TensorRT container
-│   ├── docker-compose.yml   # Multi-service target runner
-│   └── .dockerignore
-│
-├── src/                     # Core application source code
-│   ├── config.py            # targets.yaml parser & emulation validator
-│   ├── runtimes/            # Hardware-specific execution adapters
-│   │   ├── base.py          # Abstract BaseDetector interface
-│   │   ├── pytorch_runner.py# PyTorch / Ultralytics runner
-│   │   ├── onnx_runner.py   # ONNX Runtime CPU/CUDA engine
-│   │   ├── jetson_runner.py # Jetson TensorRT adapter
-│   │   ├── rknn_runner.py   # Rockchip RK3588 NPU adapter
-│   │   └── hailo_runner.py  # Hailo-10H AI module adapter
-│   ├── video/               # Video frame extraction & bounding box annotation
-│   │   ├── reader.py        # Video stream reader
-│   │   └── annotator.py     # Detections & telemetry overlay
-│   ├── simulation/          # Edge-device simulation
-│   │   ├── model_profile.py # Model GFLOPs / params counter (.onnx, .pt)
-│   │   ├── device.py        # Per-target latency model (calibrated from targets.yaml)
-│   │   ├── simulated_detector.py # Runs the real model, attaches est. device timings
-│   │   └── estimates.py     # Model x target estimate table
-│   ├── benchmark/           # Profiling & metric reporting
-│   │   ├── profiler.py      # Per-frame records, latency percentiles, FPS, RAM/CPU, detection stats
-│   │   ├── report.py        # Legacy results/metrics JSON/CSV exporter & console tables
-│   │   ├── report_builder.py# Builds the report.json (schema 1.0): environment, verdicts, real-time check
-│   │   ├── export.py        # Report bundle writer (json, csv, md, sample frames, html)
-│   │   ├── html_report.py   # Self-contained HTML report (inline CSS + SVG charts)
-│   │   ├── suite.py         # Benchmark suite runner: manifest (suite.json), stop/resume, CSV/JSON exports
-│   │   ├── suite_site.py    # Multipage benchmark report site (overview, devices, models, methodology, print)
-│   │   ├── sweep.py         # Sweep settings, quality proxies (agreement / temporal / stability), best-configuration rule
-│   │   ├── sweep_runner.py  # Executes the sweep passes (model loaded once) and builds the per-configuration entries
-│   │   ├── sweep_html.py    # Best-configuration banner, configuration table, charts, sample grid
-│   │   ├── ratings.py       # Manual ratings store (results/ratings/ratings.json)
-│   │   └── rerender.py      # Re-renders reports / suites after ratings changed (no model is run again)
-│   └── utils/
-│       └── logger.py        # Standardized logging
-│
-├── scripts/                 # CLI entry points
-│   ├── run_inference.py     # Run detection on video files or live streams
-│   ├── run_benchmark.py     # Run formal benchmark (one or several models) on a target + write report
-│   ├── run_benchmark_matrix.py # Benchmark suite: every model x every device -> multipage report (also --resume / --render-only)
-│   ├── rate_configs.py      # Manual quality ratings of benchmark configurations (+ re-render of the reports)
-│   ├── check_sweep_equivalence.py # Proves confidence filtering == re-running; self-test of the quality functions
-│   └── estimate_models.py   # Instant model x target latency estimates (no inference)
-│
-└── results/                 # Output benchmark metrics & logs
-    ├── ratings/             # ratings.json: your manual detection-quality ratings per video + model + configuration
-    ├── metrics/             # Exported JSON and CSV benchmark logs
-    ├── reports/             # One folder per benchmark report (+ suite_<timestamp>/ benchmark suites)
-    └── logs/
-```
+Model Inference Benchmark runs your models for real, inside Docker containers limited to each device's CPU cores and RAM, and estimates how fast they would run on the device's GPU or NPU from published benchmarks. You get live playback at the device's speed, one-click exportable reports, and a multipage report that compares every model on every device. Each pair is tested over camera resolutions, model input sizes and confidence thresholds, and the report shows the best setting for each.
 
 ---
 
-## 🎯 Target Hardware Selection (`targets.yaml`)
+## Contents
 
-You can manually choose and test any target platform at any time:
+- [Highlights](#highlights)
+- [Screenshots](#screenshots)
+- [Simulated devices](#simulated-devices)
+- [How the simulation works](#how-the-simulation-works)
+- [Getting started](#getting-started)
+- [Using the app](#using-the-app)
+- [Command line](#command-line)
+- [Reports and output files](#reports-and-output-files)
+- [Configuration](#configuration)
+- [Supported models](#supported-models)
+- [Project structure](#project-structure)
+- [Limitations](#limitations)
 
-| Target ID | Simulated device | Runtime modelled | CPU cores | Calibration anchor |
-|---|---|---|---|---|
-| `x86-cpu` | Host (measured, not simulated) | ONNX Runtime / PyTorch | all | — |
-| `arm64-cpu` | Raspberry Pi 5 | ONNX Runtime CPU FP32 | 4 | YOLO26n = 126 ms |
-| `jetson` | Jetson Orin Nano 8GB (Super) | TensorRT FP16 | 6 | YOLO26n = 4.57 ms |
-| `rk3588-npu` | RK3588 (Rock 5B) NPU | RKNN INT8 | 4 | YOLO26n = 41.2 ms |
-| `hailo10h` | Hailo-10H on a Raspberry Pi 5 | HailoRT INT8 | 4 | YOLOv8n = 2.67 ms |
+## Highlights
 
-To list all available targets from the CLI:
-```bash
-python scripts/run_benchmark.py --list-targets
-```
+- **Five targets out of the box:** an x86 host baseline, Raspberry Pi 5, Jetson Orin Nano 8GB (Super), RK3588 NPU and Hailo-10H. Each runs in a container with the device's core count and RAM budget.
+- **Real detections, estimated device speed.** The model really runs, so boxes, RAM use and CPU load are measured. On-device latency is scaled from a published benchmark of that exact device.
+- **Live player** with seek, pause and an overlay of estimated device FPS next to the host's real latency. Playback slows to the device's speed when the host is faster.
+- **One-click benchmark reports:** a self-contained HTML report plus JSON, per-frame CSV, a Markdown summary and annotated sample frames, downloadable as a ZIP.
+- **Benchmark all scenarios:** every model on every device, with live progress, Stop and Resume, and a multipage report site (overview, one page per device and per model, methodology, printable all-pages document).
+- **Sweeps:** camera resolution × model input size × confidence threshold. Each threshold is applied to the stored boxes instead of re-running the model, so extra thresholds cost almost no time. The report names the best setting for each model/device pair and says why it won.
+- **Your judgement counts:** rate the detection quality of any setting (coverage 1–5 and duplicate boxes), and your ratings drive the best-setting choice. Add notes per model/device pair; they appear as a column in every report.
+- **Instant estimates:** a model × device table of expected FPS computed from model size alone, with no inference.
 
----
+## Screenshots
 
-## 🧪 How Edge Hardware Is Simulated
+<table>
+<tr>
+<td width="50%"><img src="docs/images/app-benchmark-all-scenarios.png" alt="Benchmark All Scenarios setup panel"><br><sub><b>Benchmark All Scenarios</b>: pick models, devices, frames, the sweep settings and optional notes. It shows the run count and a rough ETA.</sub></td>
+<td width="50%"><img src="docs/images/report-sweep.png" alt="Single-run sweep report"><br><sub><b>Run report</b>: the best setting and why it won, all tested settings with stability and your ratings, and charts.</sub></td>
+</tr>
+</table>
 
-The target boards (and their NPUs) are not available on the dev machine, so each target is simulated in two layers:
+**Multipage suite report.** The overview shows the estimated FPS of each model on each device, coloured by whether it keeps up in real time, with the best setting under every value:
 
-1. **Functional (real):** the `.onnx` / `.pt` model really runs on the host, inside the target's Docker service, which is limited to the device's CPU cores (`cpus`) and RAM (`mem_limit`), with the runtime's thread count set to `hardware.cpu_cores`. Detections, RAM usage and CPU-side behaviour are measured for real.
-2. **Timing (estimated):** the on-device latency is derived from a published benchmark of a YOLO-class model on that exact device (`hardware.reference` in `targets.yaml`):
-   - `est. inference = max(min_inference_ms, anchor_ms × model_GFLOPs / anchor_GFLOPs)`
-   - `est. pre/post = host pre/post ms × host CPU score / device CPU score`
+![Suite overview](docs/images/suite-overview.png)
 
-The live player shows the estimated device FPS/latency (and the host's actual latency), and holds frames so playback runs at the device's speed whenever the host is faster than the device. Benchmarks report host and estimated-device numbers side by side.
+<table>
+<tr>
+<td width="50%"><img src="docs/images/suite-device-page.png" alt="Device page"><br><sub><b>Device page</b>: specs, calibration source and container limits, and every model ranked on that device.</sub></td>
+<td width="50%"><img src="docs/images/suite-model-page.png" alt="Model page"><br><sub><b>Model page</b>: model details and how it performs on every device, with checks and the reason for each best setting.</sub></td>
+</tr>
+</table>
 
-**Accuracy:** roughly ±30–50% vs. real hardware. Use it to rank models and to see which cannot reach real time on a device, not to sign off on deployment. Not modelled: INT8 quantization accuracy loss, NPU operator fallbacks to CPU, thermal throttling, and interface bottlenecks (e.g. Hailo on the Pi 5's PCIe x1).
-Device-native formats (`.engine`, `.rknn`, `.hef`) still use the vendor runtimes and only work on real hardware.
+## Simulated devices
+
+| Target | Simulated device | Runtime modelled | CPU cores | RAM budget | Calibration anchor (640×640, inference only) |
+|---|---|---|---|---|---|
+| `x86-cpu` | Host machine (measured, not simulated) | ONNX Runtime / PyTorch | all | 8 GB | — |
+| `arm64-cpu` | Raspberry Pi 5 | ONNX Runtime CPU, FP32 | 4 | 2 GB | YOLO26n: 126 ms ([Ultralytics](https://docs.ultralytics.com/guides/raspberry-pi/)) |
+| `jetson` | Jetson Orin Nano 8GB (Super) | TensorRT FP16 | 6 | 4 GB (+2 GB VRAM) | YOLO26n: 4.57 ms ([Ultralytics](https://docs.ultralytics.com/guides/nvidia-jetson/)) |
+| `rk3588-npu` | Rockchip RK3588 (Radxa Rock 5B) | RKNN INT8 | 4 | 4 GB | YOLO26n: 41.2 ms ([Ultralytics](https://docs.ultralytics.com/integrations/rockchip-rknn/)) |
+| `hailo10h` | Hailo-10H on a Raspberry Pi 5 | HailoRT INT8 | 4 | 4 GB | YOLOv8n: 2.67 ms ([Hailo Model Zoo](https://github.com/hailo-ai/hailo_model_zoo/blob/master/docs/public_models/HAILO10H/HAILO10H_object_detection.rst)) |
+
+Devices are defined in [`targets.yaml`](targets.yaml); add your own or recalibrate with your own measurements (see [Configuration](#configuration)).
+
+## How the simulation works
+
+Every benchmark has two layers:
+
+1. **Functional (measured).** The `.onnx` or `.pt` model runs on the host inside the target's Docker service. The service is capped at the device's CPU cores (`cpus`) and RAM (`mem_limit`), and the runtime uses that many threads. Detections, confidences, RAM, CPU load, model load time and pre/post-processing time are measured.
+2. **Timing (estimated).** On-device latency comes from the device's calibration anchor:
+   - `inference = max(min_inference_ms, anchor_ms × model_GFLOPs / anchor_GFLOPs)`. GFLOPs are counted from the model graph, at the input size actually used.
+   - `pre/post-processing = host_ms × host CPU score / device CPU score`.
+
+> [!IMPORTANT]
+> Device figures are estimates, roughly ±30–50% versus real hardware. Use them to rank models and to spot the ones that can't reach real time on a device, not to sign off a deployment. Not modelled: INT8 accuracy loss, NPU operations falling back to the CPU, thermal throttling, and interface bottlenecks (for example a Hailo module on the Pi 5's single PCIe lane). Detections are the same on every simulated device, because the same weights run on the host.
+
+## Getting started
+
+### Prerequisites
+
+- **Docker Desktop** (Windows/macOS) or Docker Engine with Compose v2 (Linux). The image is about 11 GB because it includes PyTorch.
+- **Python 3.10+** on the host. The web app runs on the host and launches the device containers.
+- **Disk space** for your models and videos.
+
+### Install
 
 ```bash
-# Instant estimate of every model on every target (no inference)
+git clone <repo-url> model-inference-benchmark
+cd model-inference-benchmark
+pip install -r requirements.txt
+
+# Build the shared image once; every device service reuses docker-x86-cpu:latest
+docker compose -f docker/docker-compose.yml build x86-cpu
+```
+
+### Add models and videos
+
+The repository ships the harness only. Put your files here (both folders are git-ignored):
+
+| Folder | What goes in it |
+|---|---|
+| `models/` | `.onnx` and Ultralytics `.pt` detection models (see [Supported models](#supported-models)) |
+| `videos/input/` | Test footage: `.mp4`, `.avi`, `.mkv` or `.mov` |
+
+### Run
+
+```bash
+python app.py                 # opens http://localhost:5000
+python app.py --port 5050 --no-browser
+```
+
+Keep **Docker (Hardware Simulated)** selected in the sidebar to run on the simulated devices. **Host Python** runs the same code directly on your machine, with no device limits.
+
+## Using the app
+
+### Live inference
+
+Pick a **target**, a **model** and a **video**, then press **Start Session**. The feed shows boxes and an overlay with the device's estimated FPS and latency next to the host's measured latency. Pause, seek (±2 s and ±10 s, or drag the timeline) and Stop work at any time. Tick **Save Annotated Video** to also write an `.mp4` to `videos/output/`.
+
+### Benchmark & export a report
+
+Press **📊 Benchmark & Export Report** to benchmark the selected model on the selected device. In **Benchmark** mode you can Ctrl/Shift-click several models to get one report each. When a run finishes, a report card shows the verdict, the key numbers and the export links: **Download ZIP**, **Open HTML report**, JSON, CSV and Summary. Every earlier run stays in **Past Reports**, filterable by device and model.
+
+### Benchmark all scenarios
+
+Press **🧮 Benchmark All Scenarios**, tick the models and devices (broken or device-native models are flagged), and choose the frames per run and the sweep. **Quick** uses 10 frames. While it runs you get:
+- an overall progress bar with an ETA;
+- the current device, model and setting;
+- a live model × device grid that fills in as runs finish.
+
+**Stop** keeps a partial report, and **Resume** reruns only what's missing. The finished suite card links to the multipage report, a print-all page (for a browser PDF), the ZIP, and CSV/JSON. Earlier suites are listed under **Benchmark Suites**.
+
+> [!TIP]
+> Don't run live sessions while a suite or benchmark runs. Timings are measured on the host, so other load inflates them.
+
+### Sweeps and the best setting
+
+Each benchmark tests every model/device pair over a sweep, set in the **Sweep** box or in `configs/detection.yaml`:
+
+| Dimension | Default | Notes |
+|---|---|---|
+| Camera resolution | 720p, 1080p, native | Frames are downscaled outside the timed section; heights above the video's own are skipped |
+| Model input size | 480, 640, 800 | Only for models with a dynamic input (Ultralytics `.pt`, ONNX with symbolic H/W). Fixed-size models are marked *locked* |
+| Confidence | 0.25, 0.35, 0.50 | No extra inference: the run uses the lowest threshold and filters for the others. This gives exactly the boxes of a run at that threshold (verified by `scripts/check_sweep_equivalence.py`) |
+
+Presets: **Quick**, **Full** and **Defaults**. **No sweep** gives a single-setting run. The best setting for each pair is chosen in this order:
+
+1. **Your ratings**, if you entered any for that video and model: highest coverage, then fewest duplicates, then real-time, then stability.
+2. Otherwise, among the settings that keep up in **real time**, the most **stable** wins. Stability is the average of two label-free scores: agreement with the most detailed setting, and how consistent the boxes are from frame to frame.
+3. If no setting keeps up, the fastest is shown and flagged as not real-time.
+
+### Rate detection quality
+
+Press **⭐ Rate detection quality** on a report card, in Past Reports or on a suite card. Every tested setting is shown with the **same sample frames**, so you can compare them side by side. For each setting enter:
+- **Coverage (1–5):** 5 means everyone is found, including people far back or partly covered.
+- **Duplicates:** the number of duplicate boxes you see.
+
+Saving updates every affected report and suite without re-running a model. Ratings apply to all devices and to future runs of the same video and model.
+
+### Notes
+
+Both benchmark panels have an optional **📝 Notes** section with one text box per model/device pair. Notes appear as a **Notes** column in every report: HTML, JSON, CSV, Markdown summary, Past Reports and the suite pages. Empty notes leave the cell empty. Text in any language, including right-to-left scripts, is supported.
+
+### Instant estimates
+
+**📐 Estimate All Models × Targets** computes the estimated model-only inference time and FPS of every model on every device from its GFLOPs, with no inference run. It's useful for a first cut before benchmarking.
+
+## Command line
+
+Everything in the app is also scriptable. Run inside a device's container:
+
+```bash
+# One model on one simulated device, with the default sweep → results/reports/<id>/
+docker compose -f docker/docker-compose.yml run --rm -T rk3588-npu python scripts/run_benchmark.py \
+  --target rk3588-npu --model models/your_model.onnx --video videos/input/clip.mp4 --frames 50
+
+# Every model on every device → results/reports/suite_<timestamp>/index.html
+python scripts/run_benchmark_matrix.py --targets all --models all --frames 30 --video videos/input/clip.mp4
+python scripts/run_benchmark_matrix.py --resume suite_20261003_131353       # finish a stopped suite
+python scripts/run_benchmark_matrix.py --render-only suite_20261003_131353  # rebuild the pages
+
+# Instant model × device estimates (no inference)
 python scripts/estimate_models.py
 
-# Benchmark several models on a simulated target and compare
-python scripts/run_benchmark.py --docker --target rk3588-npu --frames 50   --model models/HumanDetection_light_input_640.onnx models/HumanDetection_server_input_640.onnx
+# Manual ratings
+python scripts/rate_configs.py show --suite suite_20261003_131353
+python scripts/rate_configs.py set --video clip.mp4 --model m.pt --source 720p --input 640x640 --conf 0.35 --coverage 5 --duplicates 0
+python scripts/rate_configs.py clear --model m.pt
+
+# Plain inference on a video (writes an annotated copy)
+python scripts/run_inference.py --target jetson --docker --model models/your_model.onnx \
+  --video videos/input/clip.mp4 --output videos/output/annotated.mp4
 ```
 
-To recalibrate, edit `hardware.reference` (for example with your own on-device measurement) and `simulation.host.cpu_single_core_score` when running on another machine. Keep `cpu_cores` / `ram_limit_mb` in sync with `docker/docker-compose.yml`.
+<details>
+<summary><b>Benchmark flags</b></summary>
 
----
-
-## 📊 Benchmark Reports (export)
-
-Every benchmark run produces an exportable report bundle in `results/reports/<report_id>/`, where
-`report_id = <target>__<model>__<YYYYmmdd_HHMMSS>`.
-
-**In the web app:** pick a target and a model (in *Benchmark* mode you can Ctrl/Shift-click several models: one report each),
-set *Frames* and the video, then press **📊 Benchmark & Export Report**. A progress bar follows the run; when a model
-finishes, a report card appears with the verdict, the key numbers and the export buttons
-(**Download ZIP**, **Open HTML report**, JSON, CSV, Summary). The **Past Reports** table below lists every earlier report
-(filterable by target and model) with the same links. Benchmarks run in Docker (hardware simulated) or on the host Python
-(environment toggle), exactly like the CLI.
-
-**Notes per model/device pair.** Under the button, **📝 Notes for this benchmark (optional)** has one text box per selected model on the selected device
-(several models in Benchmark mode: one box each). Whatever you type is stored in the report as a **Notes** field and shown in the HTML report (box under the
-title), `report.json` (`"notes"`), `summary.md` (`- Notes:` line), the `results/metrics/benchmark_*.csv` and comparison files (`notes` column), the report card,
-the comparison table and the **Past Reports** table (Notes column). An empty note leaves the cell empty; the column is always there. Notes are plain text
-(any language, line breaks kept, at most 2000 characters, longer text is cut and the counter says so) and are always HTML-escaped. They are remembered per
-model + device in the browser (`localStorage`), so a re-run is prefilled; **clear** empties one.
-
-**What is in a bundle**
-
-| File | Content |
+| Flag | Meaning |
 |---|---|
-| `report.html` | Self-contained report (no CDN or external files; light/dark theme, print to PDF works): Notes box, verdict badge, KPI tiles, charts (latency per frame host vs. estimated device, latency histogram, stage breakdown, detections per frame and per class), detail tables, sample frames, method and accuracy disclaimer |
-| `report.json` | Full machine-readable report (schema 1.0, below) |
-| `frames.csv` | One row per frame: decode / pre / inference / post ms, host and estimated device latency, detections, per-class counts, max confidence, RSS MB, CPU % |
-| `summary.md` | Short paste-ready summary of the headline numbers and the verdict |
-| `samples/frame_XXXXXX.jpg` | Up to 3 annotated frames (the ones with the most detections) |
+| `--target` | Device key from `targets.yaml` (`--list-targets` lists them) |
+| `--model` | One or more model paths; several models get one report each |
+| `--video` | Input video (synthetic frames when omitted) |
+| `--frames`, `--warmup` | Frames measured per setting, and warm-up iterations |
+| `--conf` | Confidence threshold (always part of the sweep) |
+| `--source-heights` | Camera resolutions, e.g. `720 1080 native` |
+| `--input-sizes` | Model input sizes, e.g. `480 640 800` or `default` |
+| `--conf-thresholds` | Thresholds, e.g. `0.25 0.35 0.5` |
+| `--sweep-preset quick\|full`, `--no-sweep` | Sweep presets, or a single setting |
+| `--notes "text"`, `--notes-file notes.json` | Notes per pair; the file format is `{"model.onnx": {"jetson": "text"}}` |
+| `--docker` | From the host: dispatch the run into the target's container |
+| `--max-ram-mb`, `--max-vram-mb` | Override the RAM/VRAM budget that is monitored |
+| `--no-report` | Skip the report bundle |
 
-The web app builds the ZIP on the fly from that folder (`GET /api/reports/<id>/download`); nothing else is stored.
+`run_benchmark_matrix.py` takes `--targets`, `--models`, `--frames`, `--warmup`, `--video`, `--conf`, the same sweep flags, `--notes-file`, `--local` (host instead of Docker), `--resume <suite_id>` and `--render-only <suite_id>`. Ctrl+C stops a suite cleanly, and a model that fails to load gives a *failed* cell instead of stopping the suite.
 
-**What is measured, what is estimated**
+</details>
 
-- Measured on the host (inside the target's Docker limits): latency percentiles per stage, throughput, wall-clock FPS, detections and
-  confidences, model load time, first-inference time, RSS before/after load and peak RAM, CPU load relative to the target cores.
-  Video decoding is timed separately and excluded from latency/FPS. Frames are streamed, so RAM reflects the model and not a preloaded video.
-  `throughput_fps` counts processing time only; `wall_fps` includes decoding and bookkeeping.
-- Estimated (simulated targets only): on-device inference and total latency and FPS, from the calibration anchor in `targets.yaml`.
-  The report always states the ±30-50% accuracy and what is not modelled. `x86-cpu` is host-measured only.
-- Real-time verdict: required FPS is `benchmark.required_fps` in `configs/detection.yaml` if set, else the video's own FPS, else 25.
-  factor = (estimated device FPS, or host FPS when not simulated) / required FPS. `>= 1` is real-time; `0.5 - 1` warns; below `0.5` fails.
-  The report also says "analyses 1 of every N frames" when it cannot keep up.
-- Models whose output head is not YOLOv8/11 or end-to-end (e.g. face, pose, embedding models) are timed but produce no detections;
-  the verdict then says **output format not decoded** instead of implying the model found nothing.
+## Reports and output files
 
-**`report.json` overview (`schema_version` 1.0):** `report_id`, `created`, `notes` (user text for this model/device pair, `""` when none), `environment` (docker/local, host, CPU, cgroup limits, package versions),
-`target` (device, runtime, cores, RAM/VRAM budget, calibration anchor, method note and disclaimer), `model` (file, size, sha256 prefix, GFLOPs, params,
-input size, classes, output format), `config` (thresholds, frames, warmup, source), `cold_start`, `host_performance`, `device_estimate` (null when not simulated),
-`realtime`, `resources`, `detections`, `verdict` (`overall` + list of `{level, message}`), `frames_csv`, `samples`.
-
-### Sweeps, best configuration and manual ratings
-
-Every exportable benchmark (**📊 Benchmark & Export Report** for one or several models, and the **🧮 Benchmark All Scenarios** suite) tests each
-model/device pair over a **sweep** and reports the **best configuration** per pair. A configuration is
-
-| Dimension | Values (defaults in `configs/detection.yaml` -> `benchmark.sweep`) | Notes |
-|---|---|---|
-| Source (camera) resolution | frame height 720, 1080, native (480 also available) | Every decoded frame is downscaled to this height (aspect ratio kept) **outside** the timed section. Values above the video's own height are skipped. |
-| Model input size | 480, 640, 800 (+ the model's own size); 320 / 960 in the *Full* preset | **Only for models with a dynamic input**: Ultralytics `.pt` weights and ONNX graphs with symbolic H/W (detected at run time, e.g. `best-yolo11-seg.pt`, `FaceDetection_input_dynamic.onnx`). Models with a static input (Gun, Helmet, HumanDetection, face-pose, mask, ...) are *locked*: ORT rejects other sizes, so they run at their own size and the report says so. GFLOPs and the device latency estimate are recomputed for every input size. |
-| Confidence | 0.25, 0.35, 0.5 (the run's / UI confidence is always added) | **No extra inference**: the model runs once per (resolution, input size) at the lowest threshold and higher thresholds drop boxes below them. Greedy NMS is consistent under score filtering, so this gives exactly the boxes of a run at that threshold (`python scripts/check_sweep_equivalence.py` shows it for the ONNX YOLO head, the end-to-end head and the `.pt` model). Postprocess time is measured at the lowest threshold and reused (slight over-estimate for the higher ones). |
-
-The model is loaded **once** per process; the input size is switched in place, the frames of a source resolution are decoded once and reused when they fit in
-400 MB (the cache is subtracted from the peak-RAM measurement). Cost is `resolutions x input sizes` passes of `frames` frames; confidence values cost nothing.
-
-**Per-configuration metrics** (beside the usual latency / FPS / RAM / detection numbers): *agreement F1* against the reference configuration (highest
-resolution x largest input size x the run's confidence; boxes of the same class matched at IoU >= 0.5; the reference scores 1.0 by definition, so agreement
-peaks near the run's confidence), *temporal consistency* (share of boxes that reappear, same class, IoU >= 0.3, in the next frame) and
-*stability = 0.5 x agreement F1 + 0.5 x temporal consistency*. For models whose output is not decoded these are n/a.
-
-**Best configuration rule** (also written on every report and on the suite's methodology page):
-1. If you entered manual ratings for this video and model, only the **rated** configurations compete: highest *coverage*, then fewest *duplicates* (blank
-   ranks after entered), then real-time on this device, then stability, then the higher source resolution. The automatic pick is shown for comparison when it differs.
-2. Otherwise the **real-time** configurations (estimated device FPS, host FPS for the host-measured target, at least the required FPS) compete: highest
-   stability (equal to two decimals = tie), then higher source resolution, then larger input size.
-3. If nothing is real-time the fastest one is shown and flagged *not real-time at any tested setting*.
-
-**Manual ratings.** After a run press **⭐ Rate detection quality** on a report card, in the **Past Reports** table or on a suite card. The view lists every
-configuration of each model with the **same sample frames** (the ones with the most detections in the reference configuration, annotated per configuration; click to
-enlarge) and two inputs per configuration: **Coverage 1-5** (5 = every person is detected, including people far back or partly covered; 1 = many missed) and
-**Duplicates** (number of duplicate boxes you saw; lower is better). Blank = not rated. *Save* stores them in `results/ratings/ratings.json` (key
-`<video>|<model>|<source res>|<input HxW>|<conf>`) and re-renders every report and suite of that video and model: no model is run again, and the best
-configuration switches to your rating (clearing the ratings switches back to the automatic pick). Detections do not depend on the simulated device, so a rating
-applies on every device. A running suite picks the ratings up when it finishes.
-
-**What the reports show.** `report.html` of a sweep run: a *best configuration* banner (configuration, rule, reason, the automatic pick when different, ratings used),
-a table of **all configurations** (FPS, real-time, P95, GFLOPs, RAM, detections, agreement, temporal, stability, ratings; best row highlighted), charts (FPS vs source
-resolution with one line per input size, latency breakdown per configuration, detections and stability vs confidence), sample frames of every configuration, the selection
-rule and the usual detail sections for the best configuration. `report.json` keeps the top-level sections for the **best** configuration (so existing consumers keep working)
-and adds `sweep` (`dimensions`, `reference_config`, `configs[]` with every metric / rating / sample image, `best` with `rule`, `reason`, `auto_pick`); `frames.csv` has one row per
-(configuration, frame) with `config_id`, `source`, `input`, `conf` columns; `summary.md` has the best configuration and a compact table; the `results/metrics` JSON / CSV and the
-comparison files have `best_config*` columns. Suite pages: the overview heatmap, real-time and RAM matrices show the best configuration under every value (a star = chosen by
-your rating; hover for the reason); device pages list "Best configuration" and "Why" per model and link to the run report that holds all configurations; model pages add a per-configuration
-table (quality plus the estimated FPS on every device); `results.csv` / `results.json` have one row per pair **and configuration** with `is_best`, `selection_rule`, `selection_reason`, ratings and notes.
-Reports and suites made before sweeps (no `sweep` data) still open and re-render as a single configuration.
-
-**Web app.** Both the benchmark area and the suite panel have a *Sweep* box: checkboxes for the source resolutions and input sizes, an editable list of confidence thresholds, the
-presets *Quick* (native + 720p, model default size, 0.25 / 0.35 / 0.5), *Full* and *Defaults*, **No sweep** (one configuration, the old behaviour), and a live count of configurations with a rough ETA.
-The live progress and the suite grid show the current pass (for example `720p · 640 · pass 2/3`).
-
-**CLI**
-
-```bash
-# default sweep (configs/detection.yaml), best configuration + a table of all configurations on the console
-docker compose -f docker/docker-compose.yml run --rm -T -e YOLO_CONFIG_DIR=/tmp rk3588-npu python scripts/run_benchmark.py \
-  --target rk3588-npu --model models/best-yolo11-seg.pt --video videos/input/sample.mp4 --frames 50
-#   --source-heights 720 1080 native   --input-sizes 480 640 800 (or "default")   --conf-thresholds 0.25 0.35 0.5   --sweep-preset quick|full   --no-sweep
-python scripts/run_benchmark_matrix.py --targets rk3588-npu jetson --models models/a.onnx models/b.pt --sweep-preset quick --frames 10
-python scripts/run_benchmark_matrix.py --render-only suite_20261003_120000      # re-renders the suite AND its per-run reports (new ratings everywhere)
-
-python scripts/rate_configs.py show --suite suite_20261003_120000                # configurations, FPS, stability and ratings per model
-python scripts/rate_configs.py set --video v.mp4 --model m.pt --source 720p --input 640x640 --conf 0.35 --coverage 5 --duplicates 0
-python scripts/rate_configs.py import my_ratings.json                            # {"ratings": [{video, model, source, input, conf, coverage, duplicates}, ...]}
-python scripts/rate_configs.py clear --model m.pt                                # back to the automatic pick
-python scripts/rate_configs.py rerender --all                                    # rebuild every sweep report / suite from the stored ratings
-python scripts/check_sweep_equivalence.py --self-test                            # hand-made cases of the quality functions and the selection rule
-```
-
-**CLI (single run flags)**
-
-```bash
-# One model on one simulated device (report goes to results/reports/<id>/)
-docker compose -f docker/docker-compose.yml run --rm -T rk3588-npu python scripts/run_benchmark.py \
-  --target rk3588-npu --model models/HumanDetection_light_input_640.onnx \
-  --video videos/input/sample.mp4 --frames 100 --warmup 5 --conf 0.35
-# or from the host: python scripts/run_benchmark.py --docker --target rk3588-npu ...
-```
-
-`run_benchmark.py` flags: `--conf` (confidence override), `--no-report` (skip the bundle; the legacy `results/metrics` files are always written),
-`--summary-json` (all runs of the invocation, incl. `report_id` and failures), `--notes "text"` (note for the single `--model` on `--target`) and
-`--notes-file <path>` (UTF-8 JSON `{"<model file>": {"<target>": "note"}}`, for several models/targets; a plain string instead of the target object applies to
-every target; relative paths are relative to the project root and, with `--docker`, must be inside it). Free text with quotes, line breaks or non-ASCII characters is
-safest in a notes file: the web app always uses one (`results/reports/_notes/notes_<timestamp>.json`, deleted when the job ends). With `--docker`, `--notes` text is
-handed to the container through such a temporary file as well. Example: `--notes-file results/my_notes.json` with
-`{"Gun_Detection_input_640.onnx": {"rk3588-npu": "light model for the entrance camera"}}`. A multi-model run without a comparison file also writes
-`results/metrics/comparison_<target>_<time>.csv` (one row per model, `notes` included; CSVs with notes are UTF-8 with BOM so Excel shows non-ASCII text). While running it prints `PROGRESS <done>/<total>` and `REPORT <id>` lines (used by the web app).
-
-**Benchmark all scenarios: every model on every device (multipage report)**
-
-One run benchmarks every selected model on every selected device from `targets.yaml` (default: all runnable models x all targets) and
-writes a navigable, self-contained report site. It works from the web app (**🧮 Benchmark All Scenarios**) and from the CLI.
-
-*Web app.* Press **🧮 Benchmark All Scenarios** under "Benchmark & Export Report". A setup panel lists the models (broken or device-native ones are flagged and
-unchecked), the devices, frames per run (default 30, **Quick** = 10), warmup, video and confidence, plus a rough ETA line. **Start suite** runs the devices one
-after another (one Docker container per device, models sequential inside it: parallel runs would corrupt the timings). While it runs you get an overall progress
-bar (runs done, elapsed, ETA from the measured run times), the current device / model / frame, and a live model x device grid whose cells change colour as they
-finish. **Stop** works at any time: the container is removed, the remaining runs are marked *cancelled* and the partial report is still built. When it is finished
-or stopped a card shows the counts and the fastest pair with **Open report**, **Print all (PDF)**, **Download ZIP**, **CSV**, **JSON** and, for an incomplete suite,
-**Resume** (reruns only the runs that are not done). Earlier suites are listed under **Benchmark Suites**. The Docker / Host Python toggle on the left applies.
-Do not start a live session while a suite runs (the app refuses; timings would be disturbed).
-
-*Notes.* The setup panel has **📝 Notes per model/device pair (optional)**: collapsed by default with an "N of M filled" counter, a filter box, rows grouped by
-device, one per checked model x checked device (it follows the checklists, typed text is kept). Each note appears as a **Notes** column on the device pages
-(ranking table) and model pages (per-device table; the former "Notes" column with the automatic verdict messages is now called **Checks**), in the
-failed / skipped list and in the "Best model per device" table of the overview, as a small &#9998; marker on the heatmap cells of that pair (the note is in the
-cell's tooltip), in `print.html`, in `results.csv` / `results.json` (`notes` column/field for every cell) and in the per-run report of that pair. Empty notes
-leave empty cells. They are stored in `suite.json` (every cell has `"notes"`, plus the original input in `config.notes`), so **Stop / Resume** keep them.
-To change a note afterwards, edit that cell's `"notes"` in `suite.json` and run `python scripts/run_benchmark_matrix.py --render-only <suite_id>`: the site, CSV and JSON
-are regenerated (the per-run `runs/<id>/report.*` keep the note they were created with). Suites created before this feature simply show empty Notes cells.
-
-*CLI.*
-
-```bash
-python scripts/run_benchmark_matrix.py --targets all --models all --frames 30 --video videos/input/sample.mp4
-python scripts/run_benchmark_matrix.py --targets arm64-cpu jetson --models models/a.onnx models/b.onnx --frames 20 --local
-python scripts/run_benchmark_matrix.py --resume suite_20260930_120000       # rerun only cells that are not ok / skipped
-python scripts/run_benchmark_matrix.py --render-only suite_20260930_120000  # rebuild the site from suite.json
-python scripts/run_benchmark_matrix.py --targets rk3588-npu jetson --models models/a.onnx models/b.onnx --notes-file results/my_notes.json
-```
-
-Ctrl+C / SIGTERM stops the suite cleanly (container removed, rest cancelled, report rendered). A model that cannot load (for example the broken
-`HumanDetection_input_640.onnx`, whose `model.onnx.data` is missing) or a crashed container gives a *failed* cell with the reason and never aborts the suite.
-`.engine/.rknn/.hef` models get *skipped* cells (they need the vendor runtime on real hardware).
-
-*Folder layout* (`results/reports/suite_<YYYYmmdd_HHMMSS>/`; the whole folder is what the ZIP contains):
+Everything is written under `results/` (git-ignored).
 
 | Path | Content |
 |---|---|
-| `index.html` | Overview: KPIs, estimated-FPS heatmap (model x device, colour = real-time / >= 5 FPS / slower, every cell links to its run), best model per device, real-time matrix, peak-RAM-vs-budget heatmap, failed / skipped list |
-| `devices/<target>.html` | One page per device: specs and calibration anchor, ranking of all models (FPS, P50/P95, CPU-side vs inference ms, RAM vs budget, detections, verdict), charts (FPS, latency breakdown, RAM with budget line) |
-| `models/<model>.html` | One page per model: model info, results on every device, FPS / RAM / detections per device, cold start, verdicts |
-| `method.html` | How the simulation works, calibration anchors with sources, container limits, colour and verdict rules, what is not modelled |
-| `print.html` | All of the above in one document, page break per page, for the browser's Print -> Save as PDF |
-| `runs/<report_id>/` | The normal per-run bundle (report.html with a "back to suite" link, report.json, frames.csv, summary.md, one sample frame linked as `samples/*.jpg`) |
-| `suite.json` | Manifest: config, per-cell status, key metrics and `notes`, timings; rewritten atomically after every run, so partial suites always render |
-| `results.csv`, `results.json` | One row per cell (model x device) with all key metrics and the `notes` of the pair (the CSV is UTF-8 with BOM); replaces the old `matrix.csv` / `matrix.json` |
-| `raw/<target>.json` | Raw run summaries of the harness |
+| `results/reports/<target>__<model>__<time>/` | One benchmark: `report.html` (self-contained, no external files), `report.json`, `frames.csv` (one row per setting and frame), `summary.md` and `samples/*.jpg` |
+| `results/reports/suite_<time>/` | One suite: `index.html` (overview), `devices/*.html`, `models/*.html`, `method.html`, `print.html`, `runs/<id>/` (every pair's full report), `results.csv` / `results.json` (one row per pair and setting) and `suite.json` (manifest) |
+| `results/ratings/ratings.json` | Your detection-quality ratings |
+| `results/metrics/` | Flat JSON/CSV summaries of single benchmarks |
 
-All pages use inline CSS and SVG, relative links and no scripts or CDNs: the folder can be zipped, e-mailed or opened from disk. `run_benchmark.py` gained
-`--report-root`, `--max-samples`, `--link-samples`, `--back-link` and `--no-metrics-files` for this (defaults unchanged for single runs).
+All report pages use inline CSS and SVG, relative links and no scripts or CDNs, so a report folder can be zipped, e-mailed or opened straight from disk. Print a page, or `print.html`, from the browser to get a PDF.
 
-*Runtime.* Every run costs container start (once per device), process start and model load, and `(warmup + frames)` host inferences that are slowed by the
-device's CPU/RAM limits (the small Raspberry Pi 5 and Hailo budgets are the slowest). The ETA shown is a rough guess: on the reference laptop (i7-8550U, Docker Desktop) 14 models x 5 devices with 3 frames + 1 warmup took about 9.5 minutes and produced an 11.7 MB ZIP; with the default 30 frames per run extrapolating the measured per-frame times gives roughly 18 minutes for the same matrix (large models such as `HumanDetection_server` at 75 GFLOPs dominate). Use **Quick (10 frames)** or fewer models/devices for a fast first look.
-The numbers are estimates with about +/-30-50% error versus real hardware (see the methodology page): use them to rank models and spot the ones that cannot reach real time.
+<details>
+<summary><b>What a report contains</b></summary>
 
----
+- **Speed:** estimated device FPS and latency (P50/P90/P95/P99), the host's measured latency and FPS, and a breakdown into decode, pre-processing, inference and post-processing.
+- **Start-up cost:** model load time and first-inference latency.
+- **Detections:** per frame and per class, confidence statistics, and the share of frames with at least one detection.
+- **Resources:** peak RAM against the device's budget, and CPU load as a share of the device's cores.
+- **Real-time verdict:** the required FPS is `benchmark.required_fps`, else the video's FPS, else 25. Below real time, the report states how many frames the device would analyse (e.g. "about 1 of every 4").
+- **Sweep:** every tested setting with agreement, frame-to-frame consistency, stability and your ratings; the best setting, the rule that chose it and the reason; charts of FPS against resolution, the latency breakdown, and detections and stability against threshold.
+- **Context:** model details (format, size, GFLOPs, parameters, input size, output format, a file fingerprint), the device and its calibration anchor, the environment and container limits, notes, and the method with its accuracy disclaimer.
 
-## 🖥️ Interactive Web Dashboard & Live Player
+`report.json` (schema 1.0) keeps the best setting's results at the top level and adds a `sweep` section with every setting.
 
-A lightweight web app and video player is provided via [app.py](app.py):
+</details>
 
-### Key Features:
-- **Live Video Streaming (MJPEG)**: Displays bounding boxes, detections count, and latency rendered live at full FPS.
-- **Playback & Seek Controls**:
-  - Jump Forward/Backward: `[ ⏪ -10s ]`, `[ ⏪ -2s ]`, `[ +2s ⏩ ]`, `[ +10s ⏩ ]`.
-  - Interactive Scrubbing / Timeline slider.
-  - Play / Pause toggle.
-- **Save Output Toggle**: A dedicated checkbox allows you to choose whether to write the annotated video (`.mp4`) to disk or run purely in-memory.
-- **Hardware Target & Model Selector**: Choose from `x86-cpu`, `arm64-cpu`, `jetson`, `rk3588-npu`, etc.
-- **RAM & VRAM Limits**: Enforce custom hardware memory budgets.
-- **Benchmark & Export Report**: one click benchmarks the selected model(s) on the selected target and produces a downloadable report ZIP; past reports stay listed (see [Benchmark Reports](#-benchmark-reports-export)).
-- **🧮 Benchmark All Scenarios**: every model on every device with live progress, Stop / Resume and a multipage report (overview, one page per device and model, methodology, printable all-pages document, CSV/JSON) downloadable as one ZIP.
+## Configuration
 
-To launch the dashboard:
-```bash
-python app.py
-```
-Opens **`http://localhost:5000`** in your browser.
+**`targets.yaml`** defines the devices. Each has a `hardware` block with the calibration anchor:
 
----
-
-## 🚀 Quickstart (CLI)
-
-### 1. Local Setup
-```bash
-pip install -r requirements.txt
+```yaml
+jetson:
+  ram_limit_mb: 4096
+  vram_limit_mb: 2048
+  description: "NVIDIA Jetson Orin Nano 8GB (Super mode, JetPack 6), TensorRT FP16"
+  hardware:
+    device: "Jetson Orin Nano 8GB (Super)"
+    compute_unit: gpu
+    runtime: "TensorRT FP16"
+    cpu_cores: 6
+    cpu_single_core_score: 800       # Geekbench 6 single-core, scales pre/post-processing
+    min_inference_ms: 1.0
+    reference:                       # published benchmark the estimate is scaled from
+      model: YOLO26n @640
+      gflops: 5.5
+      latency_ms: 4.57
+      source: "https://docs.ultralytics.com/guides/nvidia-jetson/"
 ```
 
-### 2. Run Inference on a Video
-Place your video into `videos/input/sample.mp4`, then run:
-```bash
-python scripts/run_inference.py \
-  --target x86-cpu \
-  --model models/best-yolo11-seg.pt \
-  --video videos/input/sample.mp4 \
-  --output videos/output/annotated_sample.mp4
+- **Recalibrating:** replace `reference` with your own on-device measurement for better estimates. On a different host machine, update `simulation.host.cpu_single_core_score` too.
+- **Keep the container limits in sync:** `cpu_cores` and `ram_limit_mb` must match `cpus` and `mem_limit` of the same service in [`docker/docker-compose.yml`](docker/docker-compose.yml).
+- **`configs/detection.yaml`** holds the default confidence, IoU and input size, the default sweep (`benchmark.sweep`) and an optional `benchmark.required_fps`.
+
+## Supported models
+
+| Format | Status |
+|---|---|
+| `.onnx` with a YOLOv8/YOLO11 head (`[1, 4+classes, anchors]`) | Detections decoded; class names read from Ultralytics metadata |
+| `.onnx` with an end-to-end head (`[1, N, 6]`, YOLOv10/YOLO26 style) | Detections decoded |
+| Ultralytics `.pt` (detection or segmentation) | Detections decoded; any input size |
+| Other `.onnx` outputs (face, pose, embedding, classification…) | Timed and estimated; marked *output not decoded* instead of reporting 0 detections |
+| `.engine`, `.rknn`, `.hef` | Device-native formats; need the vendor runtime on real hardware, so they're skipped in simulation |
+
+Models with a fixed input size in the graph only sweep camera resolution and threshold. Export with dynamic height and width (for example `yolo export model=best.pt format=onnx dynamic=True`) to include input size in the sweep.
+
+## Project structure
+
+```text
+model-inference-benchmark/
+├── app.py                  # Web app: live player, benchmarks, suites, ratings (stdlib HTTP server)
+├── targets.yaml            # Simulated devices and calibration anchors
+├── configs/detection.yaml  # Detection defaults, sweep defaults, required FPS
+├── docker/                 # Dockerfiles and docker-compose.yml (one service per device)
+├── scripts/                # CLI: run_benchmark, run_benchmark_matrix, estimate_models, rate_configs,
+│                           #      run_inference, run_live_stream, check_sweep_equivalence
+├── src/
+│   ├── runtimes/           # ONNX Runtime and Ultralytics runners (+ TensorRT, RKNN, Hailo adapters)
+│   ├── simulation/         # GFLOPs profiler, device latency model, simulated detector, estimates
+│   ├── benchmark/          # Profiler, sweeps, report/suite builders, HTML pages, ratings
+│   ├── video/              # Video reader and annotator
+│   └── utils/              # Logging, resource limits, Docker helpers
+├── models/                 # Your models (git-ignored)
+├── videos/input, output/   # Your videos and annotated output (git-ignored)
+├── results/                # Reports, suites, ratings, metrics (git-ignored)
+└── docs/images/            # README screenshots
 ```
 
-### 3. Run Benchmark with RAM / VRAM Limits
-Execute performance profiling while enforcing simulated hardware memory budgets:
-```bash
-# Run on Host:
-python scripts/run_benchmark.py \
-  --target jetson \
-  --model models/best-yolo11-seg.pt \
-  --frames 100 \
-  --max-ram-mb 4096 \
-  --max-vram-mb 2048
+## Limitations
 
-# Run inside Docker Container:
-python scripts/run_benchmark.py \
-  --target arm64-cpu \
-  --docker \
-  --frames 100 \
-  --max-ram-mb 2048
-```
-- **`--docker`**: Automatically routes the job into the hardware's Docker container via Docker Compose.
-- **`--max-ram-mb`**: Cap and track RAM usage (e.g. `2048` for 2GB edge boards).
-- **`--max-vram-mb`**: Hard-cap PyTorch GPU VRAM memory fraction and monitor GPU allocation.
-
----
-
-## 🐳 Docker Execution
-
-### Direct Docker Compose Usage
-```bash
-cd docker
-
-# Run x86 CPU benchmark container
-docker compose run --rm x86-cpu
-
-# Smoke-test ARM64 container under QEMU emulation
-docker compose run --rm arm64-cpu
-```
-
-### Build Individual Images
-```bash
-# x86-64 CPU image
-docker build -t model-inference-benchmark:x86-cpu -f docker/Dockerfile.x86_cpu .
-
-# Multiarch ARM64 image (via QEMU)
-docker buildx build --platform linux/arm64 -t model-inference-benchmark:arm64-cpu -f docker/Dockerfile.arm64_cpu .
-```
+- Device speeds are **estimates** scaled from one published benchmark per device; see [How the simulation works](#how-the-simulation-works).
+- **Detections come from the host's FP32 run.** Quantization effects on the NPUs (INT8) aren't reproduced.
+- **Without labelled data the automatic best setting is a proxy.** Rate a few settings to make it reflect real detection quality.
+- **Every device service uses the same x86 image.** ARM-specific behaviour (wheels, kernels) isn't exercised.
+- **The `web` service in `docker-compose.yml`** runs the app in a container, but it can't start the device containers from there. Run `python app.py` on the host instead.
