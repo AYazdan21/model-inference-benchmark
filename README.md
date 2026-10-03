@@ -125,7 +125,7 @@ Keep **Docker (Hardware Simulated)** selected in the sidebar to run on the simul
 
 ### Live inference
 
-Pick a **target**, a **model** and a **video**, then press **Start Session**. The feed shows boxes and an overlay with the device's estimated FPS and latency next to the host's measured latency. Pause, seek (±2 s and ±10 s, or drag the timeline) and Stop work at any time. Tick **Save Annotated Video** to also write an `.mp4` to `videos/output/`.
+Pick a **target**, a **model** and a **video**, then press **Start Session**. The feed shows boxes and an overlay with the device's estimated FPS and latency next to the host's measured latency. Pause, seek (±2 s and ±10 s, or drag the timeline) and Stop work at any time. Tick **Save Annotated Video** to also write an `.mp4` to `videos/output/`. **Model Input Size** runs models with a dynamic input (Ultralytics `.pt`, dynamic ONNX such as the RetinaFace face detector) at 320–1280 px instead of their default, and the device estimate follows the size. Larger sizes find smaller faces and people but run slower; fixed-size models ignore the setting.
 
 ### Benchmark & export a report
 
@@ -199,7 +199,7 @@ python scripts/rate_configs.py clear --model m.pt
 
 # Plain inference on a video (writes an annotated copy)
 python scripts/run_inference.py --target jetson --docker --model models/your_model.onnx \
-  --video videos/input/clip.mp4 --output videos/output/annotated.mp4
+  --video videos/input/clip.mp4 --output videos/output/annotated.mp4 --input-size 960   # --input-size: dynamic-input models only
 ```
 
 <details>
