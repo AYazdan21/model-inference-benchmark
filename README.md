@@ -287,7 +287,8 @@ jetson:
 | `.onnx` with a YOLOv8/YOLO11 head (`[1, 4+classes, anchors]`) | Detections decoded; class names read from Ultralytics metadata |
 | `.onnx` with an end-to-end head (`[1, N, 6]`, YOLOv10/YOLO26 style) | Detections decoded |
 | Ultralytics `.pt` (detection or segmentation) | Detections decoded; any input size |
-| Other `.onnx` outputs (face, pose, embedding, classification…) | Timed and estimated; marked *output not decoded* instead of reporting 0 detections |
+| `.onnx` RetinaFace face detector (`loc` `[1, N, 4]`, `conf` `[1, N, 2]`, `landmarks` `[1, N, 10]`) | Faces decoded (standard anchors, BGR mean-subtracted input); landmarks are not drawn |
+| Other `.onnx` outputs (pose, embedding, classification…) | Timed and estimated; marked *output not decoded* instead of reporting 0 detections |
 | `.engine`, `.rknn`, `.hef` | Device-native formats; need the vendor runtime on real hardware, so they're skipped in simulation |
 
 Models with a fixed input size in the graph only sweep camera resolution and threshold. Export with dynamic height and width (for example `yolo export model=best.pt format=onnx dynamic=True`) to include input size in the sweep.
