@@ -1,0 +1,13 @@
+# Python caches
+__pycache__/
+*.py[cod]
+
+# Data is not part of the harness: model weights, videos and benchmark output stay local
+models/*
+!models/README.md
+videos/input/*
+!videos/input/.gitkeep
+videos/output/*
+!videos/output/.gitkeep
+results/*
+!results/.gitkeep

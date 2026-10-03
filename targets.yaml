@@ -1,0 +1,124 @@
+# targets.yaml — Edge hardware simulation & benchmark targets
+#
+# How a target is simulated:
+#   1. Functional: the .onnx/.pt model really runs on the host inside a Docker service limited to
+#      the device's CPU cores (`cpus` in docker/docker-compose.yml) and RAM (`mem_limit`), with the
+#      runtime thread count set to `hardware.cpu_cores`. Detections are real.
+#   2. Timing: the on-device latency is estimated from `hardware.reference` (a published benchmark
+#      of a YOLO-class model on that exact device), scaled by the model's GFLOPs:
+#        inference_ms = max(min_inference_ms, reference.latency_ms * model_gflops / reference.gflops)
+#      CPU-side work (resize / normalize / NMS) measured on the host is scaled by
+#      simulation.host.cpu_single_core_score / hardware.cpu_single_core_score.
+#   Accuracy is roughly +/-30-50% vs. real hardware — use it to rank models, not to sign off.
+#   Keep cpu_cores / ram_limit_mb in sync with docker/docker-compose.yml.
+
+simulation:
+  host:
+    name: "Intel Core i7-8550U (development laptop)"
+    cpu_single_core_score: 1250   # Geekbench 6 single-core, approx. Update when running on another host.
+
+targets:
+  x86-cpu:
+    arch: amd64
+    platform: linux/amd64
+    accelerator: none
+    ram_limit_mb: 8192
+    vram_limit_mb: null
+    status: active
+    can_benchmark: true
+    description: "Host / x86-64 CPU execution baseline"
+    hardware:
+      device: "Host x86-64 CPU (measured, not simulated)"
+      simulate: false
+      compute_unit: cpu
+      runtime: "ONNX Runtime / PyTorch (FP32)"
+
+  arm64-cpu:
+    arch: arm64
+    platform: linux/arm64
+    accelerator: none
+    ram_limit_mb: 2048
+    vram_limit_mb: null
+    status: active
+    can_benchmark: true
+    description: "Raspberry Pi 5 (4x Cortex-A76 @ 2.4 GHz), CPU-only inference"
+    hardware:
+      device: "Raspberry Pi 5"
+      compute_unit: cpu
+      runtime: "ONNX Runtime CPU (FP32)"
+      cpu_cores: 4
+      cpu_single_core_score: 855
+      min_inference_ms: 2.0
+      reference:
+        model: YOLO26n @640
+        gflops: 5.5
+        latency_ms: 126.0          # ONNX FP32, inference only
+        source: "https://docs.ultralytics.com/guides/raspberry-pi/"
+
+  jetson:
+    arch: arm64
+    platform: linux/arm64
+    accelerator: cuda
+    ram_limit_mb: 4096
+    vram_limit_mb: 2048
+    status: active
+    can_benchmark: true
+    description: "NVIDIA Jetson Orin Nano 8GB (Super mode, JetPack 6), TensorRT FP16"
+    hardware:
+      device: "Jetson Orin Nano 8GB (Super)"
+      compute_unit: gpu
+      runtime: "TensorRT FP16"
+      cpu_cores: 6                 # 6x Cortex-A78AE
+      cpu_single_core_score: 800
+      min_inference_ms: 1.0
+      reference:
+        model: YOLO26n @640
+        gflops: 5.5
+        latency_ms: 4.57           # TensorRT FP16, inference only
+        source: "https://docs.ultralytics.com/guides/nvidia-jetson/"
+
+  rk3588-npu:
+    arch: arm64
+    platform: linux/arm64
+    accelerator: rockchip-npu
+    ram_limit_mb: 4096
+    vram_limit_mb: null
+    status: active
+    can_benchmark: true
+    description: "Rockchip RK3588 (Radxa Rock 5B), 6 TOPS NPU, RKNN INT8"
+    hardware:
+      device: "Rockchip RK3588 NPU"
+      compute_unit: npu
+      runtime: "RKNN INT8"
+      cpu_cores: 4                 # 4x Cortex-A76 big cores (+4x A55)
+      cpu_single_core_score: 720
+      min_inference_ms: 3.0
+      reference:
+        model: YOLO26n @640
+        gflops: 5.5
+        latency_ms: 41.2           # RKNN INT8 on Rock 5B, inference only
+        source: "https://docs.ultralytics.com/integrations/rockchip-rknn/"
+
+  hailo10h:
+    arch: any
+    platform: null
+    accelerator: hailo-m2
+    ram_limit_mb: 4096
+    vram_limit_mb: null
+    status: active
+    can_benchmark: true
+    description: "Hailo-10H M.2 (40 TOPS INT8), hosted by a Raspberry Pi 5"
+    hardware:
+      device: "Hailo-10H on Raspberry Pi 5"
+      compute_unit: npu
+      runtime: "HailoRT INT8"
+      cpu_cores: 4                 # host CPU does pre/post-processing
+      cpu_single_core_score: 855
+      min_inference_ms: 1.0
+      reference:
+        model: YOLOv8n @640
+        gflops: 8.74
+        latency_ms: 2.67           # 375 FPS batch 1 (PCIe Gen3 x4). A Pi 5's PCIe x1 link will be slower.
+        source: "https://github.com/hailo-ai/hailo_model_zoo/blob/master/docs/public_models/HAILO10H/HAILO10H_object_detection.rst"
+
+available_targets: [x86-cpu, arm64-cpu, jetson, rk3588-npu, hailo10h]

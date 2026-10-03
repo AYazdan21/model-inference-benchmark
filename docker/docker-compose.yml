@@ -1,0 +1,104 @@
+# All services share the unified, prebuilt 'docker-x86-cpu' image
+# while simulating each device's CPU core count (`cpus`) and RAM (`mem_limit`).
+# Accelerator speed (GPU / NPU) is estimated analytically from targets.yaml `hardware`.
+# Keep `cpus` / `mem_limit` in sync with targets.yaml `hardware.cpu_cores` / `ram_limit_mb`.
+
+services:
+  # Web App Dashboard & Live Streaming Server
+  web:
+    image: docker-x86-cpu:latest
+    container_name: crime_detect_web
+    ports:
+      - "5000:5000"
+    volumes:
+      - ../models:/app/models
+      - ../videos:/app/videos
+      - ../results:/app/results
+      - ../configs:/app/configs
+      - ../targets.yaml:/app/targets.yaml
+      - ../src:/app/src
+      - ../scripts:/app/scripts
+      - ../app.py:/app/app.py
+    command: python app.py --port 5000 --no-browser
+
+  # x86-cpu Target Runner (Baseline Host CPU)
+  x86-cpu:
+    image: docker-x86-cpu:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.x86_cpu
+    container_name: crime_detect_x86_cpu
+    mem_limit: 8g
+    memswap_limit: 8g
+    volumes:
+      - ../models:/app/models
+      - ../videos:/app/videos
+      - ../results:/app/results
+      - ../configs:/app/configs
+      - ../targets.yaml:/app/targets.yaml
+      - ../src:/app/src
+      - ../scripts:/app/scripts
+
+  # arm64-cpu Target Simulation (Raspberry Pi 5: 4 cores, 2GB RAM budget)
+  arm64-cpu:
+    image: docker-x86-cpu:latest
+    container_name: crime_detect_arm64_cpu
+    cpus: 4
+    mem_limit: 2g
+    memswap_limit: 2g
+    volumes:
+      - ../models:/app/models
+      - ../videos:/app/videos
+      - ../results:/app/results
+      - ../configs:/app/configs
+      - ../targets.yaml:/app/targets.yaml
+      - ../src:/app/src
+      - ../scripts:/app/scripts
+
+  # Jetson Orin Nano Target Simulation (6 CPU cores, 4GB RAM budget / 2GB VRAM cap)
+  jetson:
+    image: docker-x86-cpu:latest
+    container_name: crime_detect_jetson
+    cpus: 6
+    mem_limit: 4g
+    memswap_limit: 4g
+    volumes:
+      - ../models:/app/models
+      - ../videos:/app/videos
+      - ../results:/app/results
+      - ../configs:/app/configs
+      - ../targets.yaml:/app/targets.yaml
+      - ../src:/app/src
+      - ../scripts:/app/scripts
+
+  # Rockchip RK3588 NPU Target Simulation (4 big cores)
+  rk3588-npu:
+    image: docker-x86-cpu:latest
+    container_name: crime_detect_rk3588
+    cpus: 4
+    mem_limit: 4g
+    memswap_limit: 4g
+    volumes:
+      - ../models:/app/models
+      - ../videos:/app/videos
+      - ../results:/app/results
+      - ../configs:/app/configs
+      - ../targets.yaml:/app/targets.yaml
+      - ../src:/app/src
+      - ../scripts:/app/scripts
+
+  # Hailo-10H Target Simulation (hosted by a Raspberry Pi 5: 4 cores)
+  hailo10h:
+    image: docker-x86-cpu:latest
+    container_name: crime_detect_hailo10h
+    cpus: 4
+    mem_limit: 4g
+    memswap_limit: 4g
+    volumes:
+      - ../models:/app/models
+      - ../videos:/app/videos
+      - ../results:/app/results
+      - ../configs:/app/configs
+      - ../targets.yaml:/app/targets.yaml
+      - ../src:/app/src
+      - ../scripts:/app/scripts

@@ -1,0 +1,23 @@
+# Cross-build multi-platform image for ARM64 edge targets (RPi, Rockchip, Jetson host)
+FROM --platform=linux/arm64 python:3.10-slim
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    IS_EMULATED=1
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libgl1 \
+    libglib2.0-0 \
+    ffmpeg \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+CMD ["python", "scripts/run_benchmark.py", "--target", "arm64-cpu"]

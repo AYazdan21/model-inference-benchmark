@@ -1,0 +1,31 @@
+# General detection configuration
+model:
+  path: "models/best-yolo11-seg.pt"  # Default weights file
+  input_size: [640, 640]             # [height, width]
+  conf_threshold: 0.35              # Minimum confidence score for detection
+  iou_threshold: 0.45               # NMS IoU threshold
+
+inference:
+  device: "cpu"                     # 'cpu', 'cuda', etc. (overridden by target runtime)
+  half_precision: false             # FP16 (applicable for CUDA/TensorRT)
+  warmup_iterations: 10             # Number of warmup frames before benchmarking
+
+resources:
+  max_ram_mb: null                  # Set to integer (e.g. 2048) or null to use target default
+  max_vram_mb: null                 # Set to integer (e.g. 1024) or null to use target default
+
+video:
+  save_output: true                 # Whether to write annotated video to disk
+  show_fps: true                    # Render FPS and latency overlay
+  draw_boxes: true                  # Render bounding boxes and labels
+
+benchmark:
+  max_frames: 300                   # Number of frames to benchmark (or null for all)
+  record_system_metrics: true       # Track CPU & RAM usage during inference
+  # required_fps: 25                # Real-time target used by benchmark reports (default: the video's own FPS, else 25)
+  # Sweep: every benchmark tests each model/device pair over these settings and reports the best configuration.
+  # The UI / CLI can override them (--source-heights, --input-sizes, --conf-thresholds, --sweep-preset, --no-sweep).
+  sweep:
+    source_heights: [720, 1080, 0]  # camera resolution = frame height; 0 = the video's native resolution. Values above native are skipped
+    input_sizes: [480, 640, 800]    # model input size (multiples of 32), ONLY for models with a dynamic input; the model's own size is added
+    conf_thresholds: [0.25, 0.35, 0.5]  # tested without extra inference; the model.conf_threshold above is always added
