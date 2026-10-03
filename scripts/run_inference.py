@@ -9,7 +9,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 import cv2
 from src.config import TargetConfig, load_yaml
-from src.runtimes import get_detector
+from src.runtimes import get_detector, apply_input_size
 from src.video import VideoReader, VideoAnnotator
 from src.utils.resource_limiter import setup_resource_limiter
 from src.utils.docker_runner import build_docker_run_command, is_docker_daemon_running
@@ -27,6 +27,8 @@ def parse_args():
     parser.add_argument("--output", type=str, default=None, help="Path to save annotated video (optional)")
     parser.add_argument("--config", type=str, default="configs/detection.yaml", help="Path to detection config")
     parser.add_argument("--conf", type=float, default=None, help="Override confidence threshold")
+    parser.add_argument("--input-size", type=int, default=None,
+                        help="Square model input size in pixels (multiple of 32); only models with a dynamic input use it")
     parser.add_argument("--max-frames", type=int, default=None, help="Max frames to process")
     parser.add_argument("--max-ram-mb", type=int, default=None, help="RAM memory limit in MB")
     parser.add_argument("--max-vram-mb", type=int, default=None, help="GPU VRAM memory limit in MB")
@@ -56,6 +58,8 @@ def main():
             sub_args.extend(["--output", args.output])
         if args.conf is not None:
             sub_args.extend(["--conf", str(args.conf)])
+        if args.input_size:
+            sub_args.extend(["--input-size", str(args.input_size)])
         if args.max_frames:
             sub_args.extend(["--max-frames", str(args.max_frames)])
         if args.max_ram_mb:
@@ -101,6 +105,9 @@ def main():
 
     logger.info(f"Initializing detector for target '{args.target}' with {model_path.name}...")
     detector = get_detector(args.target, str(model_path), det_cfg, device=target_cfg.device_profile(args.target))
+    size_msg = apply_input_size(detector, args.input_size)
+    if size_msg:
+        logger.info(size_msg)
 
     video_source = args.video
     if video_source.isdigit():

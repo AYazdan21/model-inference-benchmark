@@ -1067,6 +1067,13 @@ def run_live_inference_worker(req):
     save_output = bool(req.get("save_output", True))
     max_ram_mb = req.get("max_ram_mb")
     max_vram_mb = req.get("max_vram_mb")
+    # Square model input size for models with a dynamic input; anything else means "model default"
+    try:
+        input_size = int(req.get("input_size") or 0)
+    except (TypeError, ValueError):
+        input_size = 0
+    if not (32 <= input_size <= 2048 and input_size % 32 == 0):
+        input_size = 0
 
     video_input_rel = f"videos/input/{video_name}" if video_name else ""
     model_rel = f"models/{model_name}"
@@ -1081,6 +1088,7 @@ def run_live_inference_worker(req):
         job_state["logs"].append(f"[LIVE INFERENCE] Starting session on '{target}' via {env_label}...")
         job_state["logs"].append(f"[LIVE INFERENCE] Model: {model_name} | Video: {video_name or 'Webcam'}")
         job_state["logs"].append(f"[LIVE INFERENCE] Save Output: {'YES (' + out_rel + ')' if save_output else 'NO (In-Memory Only)'}")
+        job_state["logs"].append(f"[LIVE INFERENCE] Model input size: {f'{input_size}x{input_size}' if input_size else 'model default'}")
 
     if env == "docker":
         cmd = [
@@ -1110,6 +1118,8 @@ def run_live_inference_worker(req):
         cmd.extend(["--max-ram-mb", str(max_ram_mb)])
     if max_vram_mb:
         cmd.extend(["--max-vram-mb", str(max_vram_mb)])
+    if input_size:
+        cmd.extend(["--input-size", str(input_size)])
 
     proc = None
     try:
@@ -1943,6 +1953,20 @@ HTML_PAGE = """<!DOCTYPE html>
           <select id="modelSelect" onchange="rebuildNotes()"></select>
         </div>
 
+        <div class="form-group" id="inputSizeGroup">
+          <label>Model Input Size (live)</label>
+          <select id="inputSizeSelect">
+            <option value="">Model default</option>
+            <option value="320">320 x 320</option>
+            <option value="480">480 x 480</option>
+            <option value="640">640 x 640</option>
+            <option value="800">800 x 800</option>
+            <option value="960">960 x 960</option>
+            <option value="1280">1280 x 1280</option>
+          </select>
+          <div class="table-note" style="margin: 6px 0 0;">Only models with a dynamic input use it (Ultralytics .pt, ONNX with a dynamic size such as FaceDetection_input_dynamic). Larger finds smaller faces and people but runs slower; the device estimate follows the size.</div>
+        </div>
+
         <div class="form-group">
           <label>Video Input (videos/input/)</label>
           <select id="videoSelect"></select>
@@ -2254,6 +2278,7 @@ HTML_PAGE = """<!DOCTYPE html>
         document.getElementById('modeBenchBtn').classList.remove('active');
         document.getElementById('playerSection').style.display = 'block';
         document.getElementById('saveCheckboxContainer').style.display = 'flex';
+        document.getElementById('inputSizeGroup').style.display = '';
         const sel = document.getElementById('modelSelect');
         sel.multiple = false;
         sel.size = 0;
@@ -2264,6 +2289,7 @@ HTML_PAGE = """<!DOCTYPE html>
         document.getElementById('modeInferBtn').classList.remove('active');
         document.getElementById('playerSection').style.display = 'none';
         document.getElementById('saveCheckboxContainer').style.display = 'none';
+        document.getElementById('inputSizeGroup').style.display = 'none';  // benchmarks sweep input sizes instead
         const sel = document.getElementById('modelSelect');
         sel.multiple = true;
         sel.size = Math.min(8, sel.options.length);
@@ -2493,6 +2519,7 @@ HTML_PAGE = """<!DOCTYPE html>
         models: Array.from(document.getElementById('modelSelect').selectedOptions).map(o => o.value),
         video: document.getElementById('videoSelect').value,
         save_output: document.getElementById('saveOutputCheck').checked,
+        input_size: parseInt(document.getElementById('inputSizeSelect').value) || null,
         conf: parseFloat(document.getElementById('confInput').value) || 0.35,
         frames: parseInt(document.getElementById('framesInput').value) || 50,
         max_ram_mb: parseInt(document.getElementById('ramInput').value) || null,

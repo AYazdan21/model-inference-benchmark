@@ -19,7 +19,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.config import TargetConfig, load_yaml
-from src.runtimes import get_detector
+from src.runtimes import get_detector, apply_input_size
 from src.video import VideoReader, VideoAnnotator
 from src.utils.resource_limiter import setup_resource_limiter
 from src.utils.logger import get_logger
@@ -78,6 +78,8 @@ def main():
     parser.add_argument("--output", default="", help="Path to save output video (if saving)")
     parser.add_argument("--save-output", action="store_true", help="Save annotated output")
     parser.add_argument("--conf", type=float, default=0.35, help="Confidence threshold")
+    parser.add_argument("--input-size", type=int, default=None,
+                        help="Square model input size in pixels (multiple of 32); only models with a dynamic input use it")
     parser.add_argument("--max-ram-mb", type=int, default=None, help="RAM limit in MB")
     parser.add_argument("--max-vram-mb", type=int, default=None, help="VRAM limit in MB")
     parser.add_argument("--no-simulate", action="store_true", help="Show host timings only (no device latency estimation)")
@@ -103,6 +105,9 @@ def main():
         reader = VideoReader(args.video)
         annotator = VideoAnnotator(target_name=args.target, device_name=device.device if device else "")
         detector = get_detector(args.target, args.model, det_cfg, device=device)
+        size_msg = apply_input_size(detector, args.input_size)
+        if size_msg:
+            logger.info(size_msg)
         mem_tracker = setup_resource_limiter(
             max_ram_mb=args.max_ram_mb or target_info.get("ram_limit_mb"),
             max_vram_mb=args.max_vram_mb or target_info.get("vram_limit_mb"),

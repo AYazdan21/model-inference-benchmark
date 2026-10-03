@@ -56,6 +56,19 @@ def get_detector(
     detector.load_ms = load_ms  # model load time only (excludes the static GFLOPs profiling)
     return detector
 
+def apply_input_size(detector: BaseDetector, size: Optional[int]) -> Optional[str]:
+    """
+    Sets a square model input size (pixels, multiple of 32) on a model with a dynamic input.
+    Models with a fixed input keep their size. Returns a message for the log, or None when size is None.
+    """
+    if not size:
+        return None
+    if not getattr(detector, "dynamic_input", False):
+        h, w = getattr(detector, "input_size", None) or ("?", "?")
+        return f"Input size {size} ignored: {Path(detector.model_path).name} has a fixed input of {h}x{w}"
+    detector.set_input_size((int(size), int(size)))  # simulated detectors also re-estimate the device latency
+    return f"Model input size set to {size}x{size}"
+
 __all__ = [
     "BaseDetector",
     "PyTorchDetector",
@@ -64,5 +77,6 @@ __all__ = [
     "RKNNTargetDetector",
     "HailoTargetDetector",
     "get_detector",
+    "apply_input_size",
     "NATIVE_FORMATS",
 ]
